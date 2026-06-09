@@ -59,23 +59,6 @@ Feature Spec (YAML/JSON/MD)
 
 ## Setup
 
-### Local
-
-```bash
-# Clone and enter the repo
-git clone <repo-url>
-cd spec-pipeline
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Set your API key
-export ANTHROPIC_API_KEY=sk-ant-...
-
-# Run with the example spec
-python run_pipeline.py specs/example_spec.yaml
-```
-
 ### Docker
 
 ```bash
