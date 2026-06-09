@@ -1,0 +1,35 @@
+name: Spec Pipeline CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      PIPELINE_AUTO_APPROVE: "true"   # non-interactive in CI
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run pipeline with example spec
+        run: python run_pipeline.py specs/example_spec.yaml --run-id ci-${{ github.run_number }}
+
+      - name: Upload audit logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-logs-${{ github.run_number }}
+          path: audit_logs/

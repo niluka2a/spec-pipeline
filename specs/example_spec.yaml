@@ -1,0 +1,46 @@
+spec_version: "1.0"
+feature_id: "FEAT-001"
+feature_name: "User Authentication - Password Reset"
+
+feature_objective: |
+  Allow registered users to reset their password via a secure email-based
+  token flow, reducing support tickets and improving account recovery UX.
+
+user_story: |
+  As a registered user who has forgotten my password,
+  I want to receive a time-limited reset link via email,
+  So that I can securely regain access to my account without contacting support.
+
+business_rules:
+  - Reset tokens must expire after 30 minutes
+  - Tokens are single-use and invalidated immediately after use
+  - Users must confirm the new password by entering it twice
+  - New password must differ from the current password
+  - Maximum 3 reset requests per hour per email address (rate limiting)
+  - Reset emails must be sent only to verified email addresses
+
+acceptance_criteria:
+  - id: AC-001
+    description: "User can request a password reset by submitting their registered email"
+  - id: AC-002
+    description: "System sends a reset email within 60 seconds of request"
+  - id: AC-003
+    description: "Reset link expires after 30 minutes and returns an error if used after expiry"
+  - id: AC-004
+    description: "Token is invalidated after successful use"
+  - id: AC-005
+    description: "User sees a success confirmation after password is changed"
+  - id: AC-006
+    description: "Rate limiting blocks more than 3 requests per hour per email"
+
+non_functional_requirements:
+  - Token generation must use cryptographically secure random bytes (min 32 bytes)
+  - Reset endpoint must respond within 500ms under normal load
+  - All token comparisons must be constant-time to prevent timing attacks
+  - Audit log entry created for every reset request and completion
+
+out_of_scope:
+  - SMS-based reset flow
+  - OAuth / SSO password reset
+  - Admin-initiated forced resets
+  - Password history enforcement beyond current password check
