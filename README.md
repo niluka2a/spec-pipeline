@@ -75,6 +75,10 @@ docker run -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY -v $(pwd)/specs:/app/specs sp
 ```
 python run_pipeline.py <spec-file> [options]
 
+Example:
+export ANTHROPIC_API_KEY="your_key_here"
+python run_pipeline.py specs/example_spec.yaml --run-id my-run-001
+
 Arguments:
   spec              Path to spec file (.yaml, .json, or .md)
 
