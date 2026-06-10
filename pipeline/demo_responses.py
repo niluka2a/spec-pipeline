@@ -63,10 +63,9 @@ DEMO_IMPLEMENTATION = {
     "sandbox/src/token_store.py": '''\
 """Token store — manages reset tokens with expiry and single-use enforcement."""
 import hashlib
-import hmac
 import secrets
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 TOKEN_TTL_SECONDS = 1800  # 30 minutes
