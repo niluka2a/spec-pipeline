@@ -96,6 +96,7 @@ Options:
 |---|---|---|
 | `ANTHROPIC_API_KEY` | ✅ | Anthropic API key |
 | `PIPELINE_AUTO_APPROVE` | ❌ | Set to `true` to skip interactive prompts (CI mode) |
+| `PIPELINE_DEMO_MODE` | ❌ | Set to `true` to run in demo mode |
 
 ---
 
