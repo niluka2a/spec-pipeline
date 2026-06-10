@@ -79,6 +79,9 @@ Example:
 export ANTHROPIC_API_KEY="your_key_here"
 python run_pipeline.py specs/example_spec.yaml --run-id my-run-001
 
+Demo mode:
+PIPELINE_DEMO_MODE=true PIPELINE_AUTO_APPROVE=true python run_pipeline.py specs/example_spec.yaml
+
 Arguments:
   spec              Path to spec file (.yaml, .json, or .md)
 

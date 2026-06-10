@@ -4,6 +4,7 @@ Converts a validated spec into a structured implementation plan using Claude.
 """
 
 import json
+import os
 import sys
 from typing import Any
 
@@ -12,8 +13,10 @@ import yaml
 
 from prompts.templates import PLANNING_PROMPT
 from pipeline.audit import AuditLogger
+from pipeline.utils import _parse_json
+from pipeline.demo_responses import DEMO_PLAN
 
-MODEL = "claude-sonnet-4-20250514"
+MODEL = "claude-sonnet-4-6"
 
 
 def generate_plan(
@@ -24,13 +27,19 @@ def generate_plan(
     """Call Claude to produce an implementation plan from the spec."""
     print("\n[planning] Generating implementation plan...")
 
+    if os.environ.get("PIPELINE_DEMO_MODE") == "true":
+        print("  [DEMO] Using pre-written plan")
+        audit.log_ai_interaction("planning", "DEMO_MODE", str(DEMO_PLAN), "demo")
+        _print_plan(DEMO_PLAN)
+        return DEMO_PLAN
+
     spec_yaml = yaml.dump(spec, default_flow_style=False)
     # Format the prompt with the YAML spec embedded.
     prompt = PLANNING_PROMPT.format(spec_yaml=spec_yaml)
 
     response = client.messages.create(
         model=MODEL,
-        max_tokens=2000,
+        max_tokens=4000,
         messages=[{"role": "user", "content": prompt}],
     )
 
@@ -41,8 +50,7 @@ def generate_plan(
         plan = json.loads(raw)
     except json.JSONDecodeError:
         # Try stripping accidental markdown fences
-        cleaned = raw.replace("```json", "").replace("```", "").strip()
-        plan = json.loads(cleaned)
+        plan = _parse_json(raw) 
 
     _print_plan(plan)
     return plan

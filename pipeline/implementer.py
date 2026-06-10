@@ -4,6 +4,7 @@ Generates code from the approved plan, restricted to sandbox/src/.
 """
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -12,8 +13,10 @@ import yaml
 
 from prompts.templates import IMPLEMENTATION_PROMPT
 from pipeline.audit import AuditLogger
+from pipeline.utils import _parse_json
+from pipeline.demo_responses import DEMO_IMPLEMENTATION
 
-MODEL = "claude-sonnet-4-20250514"
+MODEL = "claude-sonnet-4-6"
 ALLOWED_ROOT = Path("sandbox/src")
 
 
@@ -26,13 +29,19 @@ def generate_implementation(
     """Generate code files from spec + plan. Returns {filepath: content}."""
     print("\n[implementation] Generating code...")
 
+    if os.environ.get("PIPELINE_DEMO_MODE") == "true":
+        print("  [DEMO] Using pre-written implementation")
+        audit.log_ai_interaction("implementation", "DEMO_MODE", str(DEMO_IMPLEMENTATION), "demo")
+        _write_files(DEMO_IMPLEMENTATION, audit)
+        return DEMO_IMPLEMENTATION
+
     spec_yaml = yaml.dump(spec, default_flow_style=False)
     plan_json = json.dumps(plan, indent=2)
     prompt = IMPLEMENTATION_PROMPT.format(spec_yaml=spec_yaml, plan_json=plan_json)
 
     response = client.messages.create(
         model=MODEL,
-        max_tokens=4000,
+        max_tokens=8000,
         messages=[{"role": "user", "content": prompt}],
     )
 
@@ -42,8 +51,7 @@ def generate_implementation(
     try:
         files = json.loads(raw)
     except json.JSONDecodeError:
-        cleaned = raw.replace("```json", "").replace("```", "").strip()
-        files = json.loads(cleaned)
+        files = _parse_json(raw) 
 
     # Governance: enforce sandbox restriction
     safe_files = _enforce_sandbox(files)

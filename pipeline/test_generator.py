@@ -4,16 +4,20 @@ Generates pytest unit, integration, and acceptance tests mapped to AC criteria.
 """
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
 import anthropic
 import yaml
 
+from pipeline.demo_responses import DEMO_TESTS
 from prompts.templates import TEST_GENERATION_PROMPT
 from pipeline.audit import AuditLogger
+from pipeline.utils import _parse_json
+from pipeline.demo_responses import DEMO_TESTS
 
-MODEL = "claude-sonnet-4-20250514"
+MODEL = "claude-sonnet-4-6"
 
 
 def generate_tests(
@@ -24,6 +28,12 @@ def generate_tests(
 ) -> dict[str, str]:
     """Generate test files mapped to spec acceptance criteria."""
     print("\n[test-gen] Generating tests...")
+
+    if os.environ.get("PIPELINE_DEMO_MODE") == "true":
+        print("  [DEMO] Using pre-written tests")
+        audit.log_ai_interaction("test_generation", "DEMO_MODE", str(DEMO_TESTS), "demo")
+        _write_files(DEMO_TESTS, audit)
+        return DEMO_TESTS
 
     spec_yaml = yaml.dump(spec, default_flow_style=False)
 
@@ -55,15 +65,18 @@ def generate_tests(
     try:
         test_files = json.loads(raw)
     except json.JSONDecodeError:
-        cleaned = raw.replace("```json", "").replace("```", "").strip()
-        test_files = json.loads(cleaned)
+        test_files = _parse_json(raw)
 
     # Write test files
-    for path, content in test_files.items():
+    _write_files(test_files, audit)
+    return test_files
+
+
+def _write_files(files: dict[str, str], audit: AuditLogger) -> None:
+    """Write generated files to disk."""
+    for path, content in files.items():
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content, encoding="utf-8")
         audit.log_generated_file(str(p), "test", len(content))
         print(f"  🧪  Written: {p}  ({len(content)} chars)")
-
-    return test_files
