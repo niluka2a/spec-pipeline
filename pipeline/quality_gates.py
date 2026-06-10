@@ -72,6 +72,7 @@ def run_quality_gates(audit: AuditLogger, base_dir: str = ".") -> bool:
             *(_sandbox_source_files()),
             "--ignore-missing-imports",
             "--no-strict-optional",
+            "--explicit-package-bases",
         ],
         cwd=base_dir,
     )
