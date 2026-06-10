@@ -10,8 +10,8 @@ jobs:
   pipeline:
     runs-on: ubuntu-latest
     env:
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      PIPELINE_AUTO_APPROVE: "true"   # non-interactive in CI
+      PIPELINE_DEMO_MODE: "true"       # no API calls
+      PIPELINE_AUTO_APPROVE: "true"    # non-interactive in CI
 
     steps:
       - uses: actions/checkout@v4
