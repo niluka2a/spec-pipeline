@@ -13,7 +13,7 @@ import yaml
 
 from prompts.templates import IMPLEMENTATION_PROMPT
 from pipeline.audit import AuditLogger
-from pipeline.utils import _parse_json
+from pipeline.utils import _parse_delimited
 from pipeline.demo_responses import DEMO_IMPLEMENTATION
 
 MODEL = "claude-sonnet-4-6"
@@ -51,7 +51,7 @@ def generate_implementation(
     try:
         files = json.loads(raw)
     except json.JSONDecodeError:
-        files = _parse_json(raw) 
+        files = _parse_delimited(raw)
 
     # Governance: enforce sandbox restriction
     safe_files = _enforce_sandbox(files)

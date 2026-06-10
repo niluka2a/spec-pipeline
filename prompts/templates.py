@@ -35,14 +35,15 @@ CONSTRAINTS:
 - Use type hints throughout
 - Include docstrings on all public functions and classes
 - No external dependencies beyond Python stdlib unless clearly justified
-- Code must be directly runnable
 
-Return ONLY a JSON object mapping file paths to file contents (no markdown):
-{{
-  "sandbox/src/filename.py": "...full file content...",
-  "sandbox/src/another.py": "...full file content..."
-}}"""
+Return files using this EXACT format and nothing else:
 
+===FILE: sandbox/src/filename.py===
+<full file content here>
+===FILE: sandbox/src/another.py===
+<full file content here>
+===END===
+"""
 
 TEST_GENERATION_PROMPT = """You are a test engineer. Generate comprehensive pytest tests for the
 implementation below. Each test must map back to the acceptance criteria IDs from the spec.
@@ -63,8 +64,11 @@ Requirements:
 - Use pytest fixtures where appropriate
 - Tests must be self-contained (no external services)
 
-Return ONLY a JSON object mapping test file paths to file contents:
-{{
-  "tests/test_unit.py": "...full pytest file...",
-  "tests/test_integration.py": "...full pytest file..."
-}}"""
+Return files using this EXACT format and nothing else:
+
+===FILE: tests/test_unit.py===
+<full file content here>
+===FILE: tests/test_integration.py===
+<full file content here>
+===END===
+"""

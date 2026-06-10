@@ -14,7 +14,7 @@ import yaml
 from pipeline.demo_responses import DEMO_TESTS
 from prompts.templates import TEST_GENERATION_PROMPT
 from pipeline.audit import AuditLogger
-from pipeline.utils import _parse_json
+from pipeline.utils import _parse_delimited
 from pipeline.demo_responses import DEMO_TESTS
 
 MODEL = "claude-sonnet-4-6"
@@ -65,7 +65,7 @@ def generate_tests(
     try:
         test_files = json.loads(raw)
     except json.JSONDecodeError:
-        test_files = _parse_json(raw)
+        test_files = _parse_delimited(raw)
 
     # Write test files
     _write_files(test_files, audit)
