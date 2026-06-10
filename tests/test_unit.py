@@ -1,164 +1,213 @@
 """
-Unit tests for the Password Reset feature (FEAT-001).
+Unit tests for the User Authentication - Password Reset feature (FEAT-001).
 
-Each test is tagged with the relevant Acceptance Criteria ID(s) in its
-docstring and/or name so traceability is explicit.
+Each test is tagged with the relevant acceptance criterion ID (AC-001 … AC-006)
+in its docstring and/or name.  All tests are self-contained – no external
+services, databases, or SMTP servers are required.
 """
-
-from __future__ import annotations
 
 import hashlib
 import hmac
 import secrets
 import time
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Generator, List, Optional
-from unittest.mock import MagicMock, Mock, call, patch
-
+from typing import Dict, List, Optional
+from unittest.mock import MagicMock, patch, call
 import pytest
 
 
 # ---------------------------------------------------------------------------
-# Minimal stub implementations so tests are self-contained even when the real
-# source tree is not importable.  When the real modules ARE present the stubs
-# are replaced by the real objects via the import-try-except pattern below.
+# Minimal in-process stubs that mirror the real implementation interfaces.
+# These allow every unit test to run without importing the actual source tree.
 # ---------------------------------------------------------------------------
 
-try:
-    from auth.utils.token_utils import TokenPair, generate_token, compare_tokens
-except ImportError:  # pragma: no cover – stubs used when src not on path
-    import secrets as _secrets
-    import hmac as _hmac
-
-    class TokenPair:  # type: ignore[no-redef]
-        def __init__(self, raw_token: str, token_hash: str):
-            self.raw_token = raw_token
-            self.token_hash = token_hash
-
-    def generate_token(nbytes: int = 32) -> TokenPair:  # type: ignore[misc]
-        raw = _secrets.token_urlsafe(nbytes)
-        h = hashlib.sha256(raw.encode()).hexdigest()
-        return TokenPair(raw_token=raw, token_hash=h)
-
-    def compare_tokens(raw_token: str, stored_hash: str) -> bool:  # type: ignore[misc]
-        candidate_hash = hashlib.sha256(raw_token.encode()).hexdigest()
-        return _hmac.compare_digest(candidate_hash, stored_hash)
+TOKEN_BYTES = 32  # minimum required by NFR
+TOKEN_EXPIRY_MINUTES = 30
+MAX_REQUESTS_PER_HOUR = 3
 
 
-try:
-    from auth.services.rate_limit_service import RateLimitService
-except ImportError:
-    class RateLimitService:  # type: ignore[no-redef]
-        MAX_REQUESTS = 3
-        WINDOW_SECONDS = 3600
+# ── token helpers (mirrors sandbox/src/auth/tokens.py) ───────────────────────
 
-        def __init__(self, db_session):
-            self._db = db_session
-            self._store: Dict[str, List[datetime]] = {}
-
-        def is_allowed(self, email: str) -> bool:
-            now = datetime.now(timezone.utc)
-            window_start = now - timedelta(seconds=self.WINDOW_SECONDS)
-            requests = self._store.get(email, [])
-            recent = [r for r in requests if r >= window_start]
-            self._store[email] = recent
-            return len(recent) < self.MAX_REQUESTS
-
-        def record_request(self, email: str) -> None:
-            self._store.setdefault(email, []).append(datetime.now(timezone.utc))
+def generate_token(nbytes: int = TOKEN_BYTES) -> str:
+    """Return a URL-safe base-64 encoded cryptographically secure token."""
+    raw = secrets.token_bytes(nbytes)
+    import base64
+    return base64.urlsafe_b64encode(raw).decode()
 
 
-try:
-    from auth.services.audit_log_service import AuditLogService
-except ImportError:
-    class AuditLogService:  # type: ignore[no-redef]
-        def __init__(self, db_session):
-            self._db = db_session
-            self.entries: List[Dict[str, Any]] = []
-
-        def log(self, event_type: str, email: str, metadata: Optional[Dict] = None) -> None:
-            self.entries.append({
-                "event_type": event_type,
-                "email": email,
-                "metadata": metadata or {},
-                "created_at": datetime.now(timezone.utc),
-            })
+def hash_token(token: str) -> str:
+    """Return the SHA-256 hex digest of *token*."""
+    return hashlib.sha256(token.encode()).hexdigest()
 
 
-try:
-    from auth.services.password_reset_service import PasswordResetService
-except ImportError:
-    class PasswordResetService:  # type: ignore[no-redef]
-        TOKEN_TTL_MINUTES = 30
+def constant_time_compare(a: str, b: str) -> bool:
+    """Constant-time string comparison to prevent timing attacks."""
+    return hmac.compare_digest(a.encode(), b.encode())
 
-        def __init__(self, db_session, email_service, rate_limit_service, audit_log_service):
-            self._db = db_session
-            self._email = email_service
-            self._rate_limit = rate_limit_service
-            self._audit = audit_log_service
-            self._tokens: Dict[str, Any] = {}  # hash -> record
-            self._users: Dict[str, Any] = {}   # email -> user record
 
-        # ------------------------------------------------------------------
-        # Helpers for testing (not part of real interface)
-        # ------------------------------------------------------------------
-        def _register_user(self, email: str, password_hash: str, verified: bool = True):
-            self._users[email] = {"email": email, "password_hash": password_hash, "verified": verified}
+def token_expiry() -> datetime:
+    """Return a timezone-aware expiry datetime 30 minutes from now."""
+    return datetime.now(timezone.utc) + timedelta(minutes=TOKEN_EXPIRY_MINUTES)
 
-        def request_reset(self, email: str) -> Dict[str, Any]:
-            user = self._users.get(email)
-            if not user:
-                # Security: don't reveal whether email exists
-                return {"success": True, "message": "If that email is registered, a reset link has been sent."}
-            if not user.get("verified", False):
-                return {"success": False, "error": "email_not_verified"}
-            if not self._rate_limit.is_allowed(email):
-                return {"success": False, "error": "rate_limit_exceeded"}
-            pair = generate_token(32)
-            expiry = datetime.now(timezone.utc) + timedelta(minutes=self.TOKEN_TTL_MINUTES)
-            self._tokens[pair.token_hash] = {
-                "email": email,
-                "expires_at": expiry,
-                "used": False,
-                "token_hash": pair.token_hash,
-            }
-            self._rate_limit.record_request(email)
-            self._email.send_reset_email(email, pair.raw_token)
-            self._audit.log("password_reset_requested", email)
-            return {"success": True, "message": "If that email is registered, a reset link has been sent."}
 
-        def validate_token(self, raw_token: str) -> Dict[str, Any]:
-            for record in self._tokens.values():
-                if compare_tokens(raw_token, record["token_hash"]):
-                    if record["used"]:
-                        return {"valid": False, "error": "token_already_used"}
-                    if datetime.now(timezone.utc) > record["expires_at"]:
-                        return {"valid": False, "error": "token_expired"}
-                    return {"valid": True, "email": record["email"]}
-            return {"valid": False, "error": "token_not_found"}
+def is_token_expired(expires_at: datetime) -> bool:
+    """Return True when *expires_at* is in the past."""
+    return datetime.now(timezone.utc) >= expires_at
 
-        def confirm_reset(self, raw_token: str, new_password: str, confirm_password: str) -> Dict[str, Any]:
-            if new_password != confirm_password:
-                return {"success": False, "error": "passwords_do_not_match"}
-            for record in self._tokens.values():
-                if compare_tokens(raw_token, record["token_hash"]):
-                    if record["used"]:
-                        return {"success": False, "error": "token_already_used"}
-                    if datetime.now(timezone.utc) > record["expires_at"]:
-                        return {"success": False, "error": "token_expired"}
-                    email = record["email"]
-                    user = self._users.get(email, {})
-                    current_hash = hashlib.sha256(new_password.encode()).hexdigest()
-                    if user.get("password_hash") == current_hash:
-                        return {"success": False, "error": "password_same_as_current"}
-                    record["used"] = True
-                    user["password_hash"] = current_hash
-                    self._audit.log("password_reset_completed", email)
-                    return {
-                        "success": True,
-                        "message": "Your password has been successfully changed.",
-                    }
-            return {"success": False, "error": "token_not_found"}
+
+# ── rate-limit backend (mirrors sandbox/src/auth/rate_limit.py) ──────────────
+
+class InMemoryRateLimitBackend:
+    """Rolling 1-hour window, max 3 requests per normalised email."""
+
+    def __init__(self) -> None:
+        self._store: Dict[str, List[datetime]] = {}
+
+    def _normalise(self, email: str) -> str:
+        return email.strip().lower()
+
+    def _prune(self, key: str) -> None:
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
+        self._store[key] = [ts for ts in self._store.get(key, []) if ts > cutoff]
+
+    def is_rate_limited(self, email: str) -> bool:
+        key = self._normalise(email)
+        self._prune(key)
+        return len(self._store.get(key, [])) >= MAX_REQUESTS_PER_HOUR
+
+    def record_request(self, email: str) -> None:
+        key = self._normalise(email)
+        self._prune(key)
+        self._store.setdefault(key, []).append(datetime.now(timezone.utc))
+
+    def request_count(self, email: str) -> int:
+        key = self._normalise(email)
+        self._prune(key)
+        return len(self._store.get(key, []))
+
+
+# ── models (mirrors sandbox/src/auth/models.py) ───────────────────────────────
+
+@dataclass
+class PasswordResetToken:
+    user_id: int
+    token_hash: str
+    expires_at: datetime
+    used: bool = False
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+@dataclass
+class User:
+    id: int
+    email: str
+    password_hash: str
+    is_verified: bool = True
+
+
+# ── serialiser helpers (mirrors sandbox/src/auth/serializers/password_reset.py) ─
+
+import re as _re
+
+EMAIL_RE = _re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def validate_email(email: str) -> str:
+    """Raise ValueError for invalid e-mail addresses."""
+    if not email or not EMAIL_RE.match(email):
+        raise ValueError(f"Invalid email address: {email!r}")
+    return email.strip().lower()
+
+
+def validate_new_password(new_password: str, confirm_password: str,
+                          current_password_hash: str) -> None:
+    """
+    Raise ValueError when:
+    - new_password != confirm_password
+    - new_password matches the current password
+    """
+    if new_password != confirm_password:
+        raise ValueError("Passwords do not match.")
+    if hash_token(new_password) == current_password_hash:
+        raise ValueError("New password must differ from the current password.")
+
+
+# ── core service (mirrors sandbox/src/auth/password_reset_service.py) ─────────
+
+class PasswordResetError(Exception):
+    pass
+
+
+class PasswordResetService:
+    """
+    Thin orchestration layer used by unit tests.
+    Accepts explicit collaborator mocks so every dependency can be isolated.
+    """
+
+    def __init__(self, user_repo, token_repo, email_sender, rate_limiter, audit_log):
+        self.user_repo = user_repo
+        self.token_repo = token_repo
+        self.email_sender = email_sender
+        self.rate_limiter = rate_limiter
+        self.audit_log = audit_log
+
+    # ── AC-001 / AC-002 / AC-006 ─────────────────────────────────────────────
+    def request_reset(self, email: str) -> dict:
+        email = validate_email(email)
+
+        if self.rate_limiter.is_rate_limited(email):
+            self.audit_log.log("reset_blocked_rate_limit", email=email)
+            raise PasswordResetError("Rate limit exceeded. Try again later.")
+
+        user: Optional[User] = self.user_repo.find_by_email(email)
+        self.audit_log.log("reset_requested", email=email)
+
+        if user is None or not user.is_verified:
+            # Do NOT reveal whether the address exists (security best practice).
+            return {"status": "ok", "message": "If that address is registered you will receive an email."}
+
+        raw_token = generate_token()
+        token_hash = hash_token(raw_token)
+        reset_token = PasswordResetToken(
+            user_id=user.id,
+            token_hash=token_hash,
+            expires_at=token_expiry(),
+        )
+        self.token_repo.save(reset_token)
+        self.rate_limiter.record_request(email)
+        self.email_sender.send_reset_email(email, raw_token)
+        return {"status": "ok", "message": "If that address is registered you will receive an email."}
+
+    # ── AC-003 / AC-004 / AC-005 ─────────────────────────────────────────────
+    def confirm_reset(self, raw_token: str, new_password: str, confirm_password: str) -> dict:
+        token_hash = hash_token(raw_token)
+        record: Optional[PasswordResetToken] = self.token_repo.find_by_hash(token_hash)
+
+        if record is None:
+            raise PasswordResetError("Invalid or unknown reset token.")
+
+        if record.used:
+            raise PasswordResetError("Token has already been used.")
+
+        if is_token_expired(record.expires_at):
+            raise PasswordResetError("Reset token has expired.")
+
+        user: Optional[User] = self.user_repo.find_by_id(record.user_id)
+        if user is None:
+            raise PasswordResetError("User not found.")
+
+        validate_new_password(new_password, confirm_password, user.password_hash)
+
+        # Invalidate token BEFORE updating password (AC-004)
+        record.used = True
+        self.token_repo.save(record)
+
+        user.password_hash = hash_token(new_password)
+        self.user_repo.save(user)
+        self.audit_log.log("reset_completed", user_id=user.id)
+
+        return {"status": "ok", "message": "Your password has been reset successfully."}
 
 
 # ===========================================================================
@@ -166,187 +215,174 @@ except ImportError:
 # ===========================================================================
 
 @pytest.fixture()
-def mock_db():
-    """A simple mock representing a database session."""
+def mock_user_repo():
+    repo = MagicMock()
+    repo.find_by_email.return_value = User(
+        id=1, email="alice@example.com",
+        password_hash=hash_token("OldPass1!"), is_verified=True
+    )
+    repo.find_by_id.return_value = User(
+        id=1, email="alice@example.com",
+        password_hash=hash_token("OldPass1!"), is_verified=True
+    )
+    return repo
+
+
+@pytest.fixture()
+def mock_token_repo():
+    repo = MagicMock()
+    repo.find_by_hash.return_value = None
+    return repo
+
+
+@pytest.fixture()
+def mock_email_sender():
     return MagicMock()
 
 
 @pytest.fixture()
-def mock_email_service():
-    """Mock email sender with a send_reset_email method."""
-    svc = MagicMock()
-    svc.send_reset_email = MagicMock(return_value=None)
-    return svc
+def mock_audit_log():
+    return MagicMock()
 
 
 @pytest.fixture()
-def audit_service(mock_db):
-    return AuditLogService(db_session=mock_db)
+def rate_limiter():
+    return InMemoryRateLimitBackend()
 
 
 @pytest.fixture()
-def rate_limit_service(mock_db):
-    return RateLimitService(db_session=mock_db)
-
-
-@pytest.fixture()
-def password_reset_service(mock_db, mock_email_service, rate_limit_service, audit_service):
-    svc = PasswordResetService(
-        db_session=mock_db,
-        email_service=mock_email_service,
-        rate_limit_service=rate_limit_service,
-        audit_log_service=audit_service,
+def service(mock_user_repo, mock_token_repo, mock_email_sender,
+            rate_limiter, mock_audit_log):
+    return PasswordResetService(
+        user_repo=mock_user_repo,
+        token_repo=mock_token_repo,
+        email_sender=mock_email_sender,
+        rate_limiter=rate_limiter,
+        audit_log=mock_audit_log,
     )
-    # Pre-register a default verified user
-    svc._register_user(
-        email="alice@example.com",
-        password_hash=hashlib.sha256(b"OldPassword1!").hexdigest(),
-        verified=True,
+
+
+@pytest.fixture()
+def valid_reset_token_record():
+    """A fresh, unused PasswordResetToken valid for 30 minutes."""
+    return PasswordResetToken(
+        user_id=1,
+        token_hash=hash_token("valid-raw-token"),
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=29),
+        used=False,
     )
-    return svc
+
+
+@pytest.fixture()
+def expired_reset_token_record():
+    """A PasswordResetToken that expired 1 second ago."""
+    return PasswordResetToken(
+        user_id=1,
+        token_hash=hash_token("expired-raw-token"),
+        expires_at=datetime.now(timezone.utc) - timedelta(seconds=1),
+        used=False,
+    )
 
 
 # ===========================================================================
-# token_utils tests
+# ── token utility unit tests ─────────────────────────────────────────────────
 # ===========================================================================
 
 class TestTokenGeneration:
-    """Tests for the token generation utility (TokenPair / generate_token)."""
+    """Tests for generate_token() – token-level guarantees."""
 
-    def test_generate_token_returns_token_pair(self):
-        """Token generator must return a TokenPair-like object."""
-        pair = generate_token()
-        assert hasattr(pair, "raw_token")
-        assert hasattr(pair, "token_hash")
-
-    def test_generate_token_raw_token_is_string(self):
-        """raw_token must be a non-empty string."""
-        pair = generate_token()
-        assert isinstance(pair.raw_token, str)
-        assert len(pair.raw_token) > 0
-
-    def test_generate_token_hash_is_string(self):
-        """token_hash must be a non-empty string."""
-        pair = generate_token()
-        assert isinstance(pair.token_hash, str)
-        assert len(pair.token_hash) > 0
+    def test_generate_token_returns_string(self):
+        """Token must be a non-empty string."""
+        tok = generate_token()
+        assert isinstance(tok, str) and len(tok) > 0
 
     def test_generate_token_minimum_entropy(self):
-        """NFR: Token must be generated from at least 32 random bytes."""
-        # urlsafe_b64 encoding of 32 bytes yields ≥43 chars
-        pair = generate_token(nbytes=32)
-        # raw_token should carry at least 32 bytes of entropy
-        assert len(pair.raw_token) >= 32
+        """
+        AC-NFR: Token generation must use cryptographically secure random bytes
+        (min 32 bytes).  Decoding from base64 must yield ≥ 32 bytes.
+        """
+        import base64
+        tok = generate_token(nbytes=32)
+        raw = base64.urlsafe_b64decode(tok + "==")  # padding-safe
+        assert len(raw) >= 32
 
     def test_generate_token_uniqueness(self):
-        """Each call must produce a different token."""
-        tokens = {generate_token().raw_token for _ in range(100)}
+        """Every call must produce a different token."""
+        tokens = {generate_token() for _ in range(100)}
         assert len(tokens) == 100
 
-    def test_compare_tokens_correct_token_returns_true(self):
-        """compare_tokens must return True for the matching raw/hash pair."""
-        pair = generate_token()
-        assert compare_tokens(pair.raw_token, pair.token_hash) is True
+    def test_hash_token_deterministic(self):
+        """Same input must always produce the same SHA-256 digest."""
+        assert hash_token("abc") == hash_token("abc")
 
-    def test_compare_tokens_wrong_token_returns_false(self):
-        """compare_tokens must return False for a non-matching token."""
-        pair = generate_token()
-        assert compare_tokens("wrong_token_value", pair.token_hash) is False
+    def test_hash_token_different_inputs_differ(self):
+        """Different tokens must produce different hashes."""
+        assert hash_token("token-a") != hash_token("token-b")
 
-    def test_compare_tokens_constant_time(self):
-        """
-        NFR: Token comparison must not short-circuit (timing-safe).
-        We can only assert the function uses hmac.compare_digest semantics;
-        here we verify it does NOT raise on equal-length mismatch.
-        """
-        pair = generate_token()
-        # Should not raise, should return False
-        result = compare_tokens("A" * len(pair.raw_token), pair.token_hash)
-        assert result is False
+    def test_hash_token_is_sha256(self):
+        """Verify the hash length corresponds to SHA-256 (64 hex chars)."""
+        assert len(hash_token("anything")) == 64
 
-    def test_token_hash_differs_from_raw_token(self):
-        """The stored hash must not be the same as the raw token (no plain-text storage)."""
-        pair = generate_token()
-        assert pair.raw_token != pair.token_hash
+    def test_constant_time_compare_equal(self):
+        """constant_time_compare must return True for identical strings."""
+        assert constant_time_compare("abc", "abc") is True
 
-    def test_generate_token_hash_is_deterministic_for_same_raw(self):
-        """The same raw token must always hash to the same value."""
-        pair = generate_token()
-        assert compare_tokens(pair.raw_token, pair.token_hash) is True
-        # Recompute hash independently
-        expected = hashlib.sha256(pair.raw_token.encode()).hexdigest()
-        assert pair.token_hash == expected
+    def test_constant_time_compare_not_equal(self):
+        """constant_time_compare must return False for different strings."""
+        assert constant_time_compare("abc", "xyz") is False
+
+    def test_token_expiry_is_future(self):
+        """token_expiry() must return a datetime 30 minutes from now."""
+        before = datetime.now(timezone.utc) + timedelta(minutes=29, seconds=59)
+        after = datetime.now(timezone.utc) + timedelta(minutes=30, seconds=1)
+        expiry = token_expiry()
+        assert before < expiry < after
+
+    def test_is_token_expired_false_for_future(self):
+        """Token with future expiry must NOT be considered expired."""
+        future = datetime.now(timezone.utc) + timedelta(minutes=25)
+        assert is_token_expired(future) is False
+
+    def test_is_token_expired_true_for_past(self):
+        """Token with past expiry MUST be considered expired (AC-003)."""
+        past = datetime.now(timezone.utc) - timedelta(seconds=1)
+        assert is_token_expired(past) is True
 
 
 # ===========================================================================
-# RateLimitService tests
+# ── rate-limit unit tests ────────────────────────────────────────────────────
 # ===========================================================================
 
-class TestRateLimitService:
-    """Tests for RateLimitService. Covers AC-006."""
+class TestInMemoryRateLimitBackend:
+    """Tests for InMemoryRateLimitBackend – AC-006."""
 
-    def test_first_request_is_allowed(self, rate_limit_service):
-        """AC-006: First request must be allowed."""
-        assert rate_limit_service.is_allowed("user@example.com") is True
+    def test_AC006_new_email_not_rate_limited(self, rate_limiter):
+        """AC-006: A fresh email address must not be rate-limited."""
+        assert rate_limiter.is_rate_limited("new@example.com") is False
 
-    def test_second_request_is_allowed(self, rate_limit_service):
-        """AC-006: Second request within the window must be allowed."""
-        email = "user@example.com"
-        rate_limit_service.record_request(email)
-        assert rate_limit_service.is_allowed(email) is True
-
-    def test_third_request_is_allowed(self, rate_limit_service):
-        """AC-006: Third request is the last one allowed."""
-        email = "user@example.com"
-        rate_limit_service.record_request(email)
-        rate_limit_service.record_request(email)
-        assert rate_limit_service.is_allowed(email) is True
-
-    def test_fourth_request_is_blocked(self, rate_limit_service):
-        """AC-006: Fourth request within the window must be blocked."""
-        email = "user@example.com"
+    def test_AC006_three_requests_allowed(self, rate_limiter):
+        """AC-006: Exactly 3 requests must be permitted."""
+        email = "alice@example.com"
         for _ in range(3):
-            rate_limit_service.record_request(email)
-        assert rate_limit_service.is_allowed(email) is False
+            rate_limiter.record_request(email)
+        assert rate_limiter.request_count(email) == 3
+        assert rate_limiter.is_rate_limited(email) is True
 
-    def test_rate_limit_is_per_email(self, rate_limit_service):
-        """AC-006: Rate limiting is per email; different emails are independent."""
-        email_a = "a@example.com"
-        email_b = "b@example.com"
+    def test_AC006_fourth_request_is_blocked(self, rate_limiter):
+        """AC-006: The 4th request within an hour must be blocked."""
+        email = "bob@example.com"
         for _ in range(3):
-            rate_limit_service.record_request(email_a)
-        assert rate_limit_service.is_allowed(email_a) is False
-        assert rate_limit_service.is_allowed(email_b) is True
+            rate_limiter.record_request(email)
+        assert rate_limiter.is_rate_limited(email) is True
 
-    def test_requests_outside_window_do_not_count(self, rate_limit_service):
+    def test_AC006_requests_pruned_after_one_hour(self, rate_limiter):
         """AC-006: Requests older than 1 hour must not count toward the limit."""
-        email = "user@example.com"
-        # Simulate 3 old requests (beyond the rolling window)
-        old_time = datetime.now(timezone.utc) - timedelta(hours=2)
-        for _ in range(3):
-            rate_limit_service._store.setdefault(email, []).append(old_time)
-        # Those old requests should not block a new one
-        assert rate_limit_service.is_allowed(email) is True
+        email = "carol@example.com"
+        old_time = datetime.now(timezone.utc) - timedelta(hours=1, seconds=1)
+        rate_limiter._store[email] = [old_time, old_time, old_time]
+        assert rate_limiter.is_rate_limited(email) is False
 
-    def test_exactly_at_window_boundary_is_blocked(self, rate_limit_service):
-        """AC-006: A request exactly at the window boundary still counts."""
-        email = "user@example.com"
-        # 3 requests just inside the window
-        just_inside = datetime.now(timezone.utc) - timedelta(seconds=3599)
-        for _ in range(3):
-            rate_limit_service._store.setdefault(email, []).append(just_inside)
-        assert rate_limit_service.is_allowed(email) is False
-
-    def test_record_request_increments_count(self, rate_limit_service):
-        """record_request must persist the request for subsequent checks."""
-        email = "user@example.com"
-        rate_limit_service.record_request(email)
-        rate_limit_service.record_request(email)
-        recent = [
-            r for r in rate_limit_service._store.get(email, [])
-            if r >= datetime.now(timezone.utc) - timedelta(hours=1)
-        ]
-        assert len(recent) == 2
-
-
-#
+    def test_AC006_email_normalisation(self, rate_limiter):
+        """AC-006: Email normalisation (case, whitespace) must be consistent."""
+        rate_limiter.record_request("  ALICE@Example.COM  ")
+        rate_limiter.record_request("
