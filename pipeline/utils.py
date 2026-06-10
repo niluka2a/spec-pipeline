@@ -1,5 +1,4 @@
 import json
-import re
 
 
 def _parse_json(raw: str) -> dict:
@@ -21,7 +20,10 @@ def _parse_json(raw: str) -> dict:
         except json.JSONDecodeError:
             pass
 
-    raise ValueError(f"Could not parse JSON from response (length={len(raw)}):\n{cleaned[:500]}")
+    raise ValueError(
+        "Could not parse JSON from response "
+        f"(length={len(raw)}):\n{cleaned[:500]}"
+    )
 
 def _parse_delimited(raw: str) -> dict[str, str]:
     """Parse ===FILE: path=== delimited response — avoids JSON escaping issues."""
@@ -30,9 +32,16 @@ def _parse_delimited(raw: str) -> dict[str, str]:
     for part in parts[1:]:  # skip preamble before first ===FILE:
         lines = part.split("\n")
         header = lines[0].strip().rstrip("===").strip()  # extract path
-        content = "\n".join(lines[1:]).split("===END===")[0].split("===FILE:")[0].strip()
+        content = (
+            "\n".join(lines[1:])
+            .split("===END===")[0]
+            .split("===FILE:")[0]
+            .strip()
+        )
         if header and content:
             files[header] = content
     if not files:
-        raise ValueError(f"No ===FILE: blocks found in response:\n{raw[:300]}")
+        raise ValueError(
+            "No ===FILE: blocks found in response:\n{raw[:300]}"
+        )
     return files

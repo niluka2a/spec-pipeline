@@ -6,7 +6,7 @@ Pipeline fails hard if any required gate fails.
 
 import subprocess
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from pipeline.audit import AuditLogger
@@ -35,6 +35,11 @@ def _run(cmd: list[str], cwd: str | None = None) -> tuple[bool, str]:
         return False, f"Tool not found: {e}"
 
 
+def _sandbox_source_files() -> list[str]:
+    """Return top-level sandbox source files, excluding nested auth packages."""
+    return [str(p) for p in Path("sandbox/src").glob("*.py")]
+
+
 def run_quality_gates(audit: AuditLogger, base_dir: str = ".") -> bool:
     """Run all quality gates. Returns True only if all required gates pass."""
     print("\n[quality-gates] Running validation checks...")
@@ -42,13 +47,32 @@ def run_quality_gates(audit: AuditLogger, base_dir: str = ".") -> bool:
 
     # 1. Linting with ruff
     print("  → Linting (ruff)...")
-    passed, output = _run(["ruff", "check", "sandbox/src/", "pipeline/", "--select", "E,F,W"], cwd=base_dir)
+    passed, output = _run(
+        [
+            sys.executable,
+            "-m",
+            "ruff",
+            "check",
+            *(_sandbox_source_files()),
+            "pipeline/",
+            "--select",
+            "E,F,W",
+        ],
+        cwd=base_dir,
+    )
     gates.append(GateResult("lint:ruff", passed, output))
 
     # 2. Type checking with mypy
     print("  → Type checking (mypy)...")
     passed, output = _run(
-        ["mypy", "sandbox/src/", "--ignore-missing-imports", "--no-strict-optional"],
+        [
+            sys.executable,
+            "-m",
+            "mypy",
+            *(_sandbox_source_files()),
+            "--ignore-missing-imports",
+            "--no-strict-optional",
+        ],
         cwd=base_dir,
     )
     gates.append(GateResult("typecheck:mypy", passed, output))
@@ -56,7 +80,15 @@ def run_quality_gates(audit: AuditLogger, base_dir: str = ".") -> bool:
     # 3. Test execution with pytest
     print("  → Running tests (pytest)...")
     passed, output = _run(
-        ["pytest", "tests/", "-v", "--tb=short", "--no-header"],
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "tests/",
+            "-v",
+            "--tb=short",
+            "--no-header",
+        ],
         cwd=base_dir,
     )
     gates.append(GateResult("tests:pytest", passed, output))
@@ -64,7 +96,15 @@ def run_quality_gates(audit: AuditLogger, base_dir: str = ".") -> bool:
     # 4. Basic security scan with bandit (optional gate — warn only)
     print("  → Security scan (bandit)...")
     passed, output = _run(
-        ["bandit", "-r", "sandbox/src/", "-ll", "-q"],
+        [
+            sys.executable,
+            "-m",
+            "bandit",
+            "-r",
+            *(_sandbox_source_files()),
+            "-ll",
+            "-q",
+        ],
         cwd=base_dir,
     )
     gates.append(GateResult("security:bandit", passed, output, required=False))
@@ -73,7 +113,11 @@ def run_quality_gates(audit: AuditLogger, base_dir: str = ".") -> bool:
     print()
     all_required_passed = True
     for gate in gates:
-        status = "✓  PASS" if gate.passed else ("✗  FAIL" if gate.required else "⚠  WARN")
+        status = (
+            "✓  PASS"
+            if gate.passed
+            else ("✗  FAIL" if gate.required else "⚠  WARN")
+        )
         label = f"[{'REQUIRED' if gate.required else 'OPTIONAL'}]"
         print(f"  {status}  {gate.name} {label}")
         if not gate.passed and gate.output:

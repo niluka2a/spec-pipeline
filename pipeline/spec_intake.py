@@ -49,7 +49,9 @@ def load_spec(path: str) -> dict[str, Any]:
         match = re.match(r"^---\s*\n(.*?)\n---\s*\n", content, re.DOTALL)
         if match:
             return yaml.safe_load(match.group(1))
-        raise ValueError("Markdown spec must contain YAML front-matter between --- delimiters")
+        raise ValueError(
+            "Markdown spec must contain YAML front-matter between --- delimiters"
+        )
 
     raise ValueError(f"Unsupported spec format: {suffix}. Use .yaml, .json, or .md")
 
@@ -72,12 +74,17 @@ def validate_spec(spec: dict[str, Any]) -> ValidationResult:
             errors.append("acceptance_criteria must contain at least one criterion")
         for i, item in enumerate(ac):
             if isinstance(item, dict) and "id" not in item:
-                warnings.append(f"acceptance_criteria[{i}] has no 'id' field — traceability will be limited")
+                warnings.append(
+                    "acceptance_criteria["
+                    f"{i}] has no 'id' field — traceability will be limited"
+                )
     else:
         errors.append("acceptance_criteria must be a list")
 
     if "spec_version" not in spec:
-        warnings.append("No 'spec_version' found — versioning recommended for auditability")
+        warnings.append(
+            "No 'spec_version' found — versioning recommended for auditability"
+        )
 
     if "feature_id" not in spec:
         warnings.append("No 'feature_id' found — recommend adding one for traceability")
@@ -102,5 +109,6 @@ def load_and_validate(path: str) -> dict[str, Any]:
         print("[spec-intake] Validation FAILED. Pipeline halted.")
         sys.exit(1)
 
-    print(f"  ✓  Spec valid — {len(spec.get('acceptance_criteria', []))} acceptance criteria found")
+    valid_count = len(spec.get("acceptance_criteria", []))
+    print(f"  ✓  Spec valid — {valid_count} acceptance criteria found")
     return spec

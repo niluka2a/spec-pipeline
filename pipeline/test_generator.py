@@ -15,7 +15,6 @@ from pipeline.demo_responses import DEMO_TESTS
 from prompts.templates import TEST_GENERATION_PROMPT
 from pipeline.audit import AuditLogger
 from pipeline.utils import _parse_delimited
-from pipeline.demo_responses import DEMO_TESTS
 
 MODEL = "claude-sonnet-4-6"
 
@@ -31,7 +30,12 @@ def generate_tests(
 
     if os.environ.get("PIPELINE_DEMO_MODE") == "true":
         print("  [DEMO] Using pre-written tests")
-        audit.log_ai_interaction("test_generation", "DEMO_MODE", str(DEMO_TESTS), "demo")
+        audit.log_ai_interaction(
+            "test_generation",
+            "DEMO_MODE",
+            str(DEMO_TESTS),
+            "demo",
+        )
         _write_files(DEMO_TESTS, audit)
         return DEMO_TESTS
 
@@ -39,7 +43,8 @@ def generate_tests(
 
     # Summarise what was implemented (file names + first 300 chars each)
     impl_summary = "\n\n".join(
-        f"### {path}\n{content[:300]}..." for path, content in implementation_files.items()
+        f"### {path}\n{content[:300]}..."
+        for path, content in implementation_files.items()
     )
 
     ac_list = "\n".join(

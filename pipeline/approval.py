@@ -5,7 +5,6 @@ In CI/CD this would be replaced by a webhook or PR review gate.
 """
 
 import os
-import sys
 from typing import Any
 
 from pipeline.audit import AuditLogger

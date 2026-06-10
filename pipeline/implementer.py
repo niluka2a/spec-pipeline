@@ -31,7 +31,12 @@ def generate_implementation(
 
     if os.environ.get("PIPELINE_DEMO_MODE") == "true":
         print("  [DEMO] Using pre-written implementation")
-        audit.log_ai_interaction("implementation", "DEMO_MODE", str(DEMO_IMPLEMENTATION), "demo")
+        audit.log_ai_interaction(
+            "implementation",
+            "DEMO_MODE",
+            str(DEMO_IMPLEMENTATION),
+            "demo",
+        )
         _write_files(DEMO_IMPLEMENTATION, audit)
         return DEMO_IMPLEMENTATION
 
@@ -66,7 +71,10 @@ def _enforce_sandbox(files: dict[str, str]) -> dict[str, str]:
         p = Path(path)
         try:
             # Resolve relative to cwd — ensure it stays under ALLOWED_ROOT
-            resolved = Path("sandbox/src") / p.name if not str(p).startswith("sandbox/src") else p
+            if str(p).startswith("sandbox/src"):
+                resolved = p
+            else:
+                resolved = Path("sandbox/src") / p.name
             safe[str(resolved)] = content
             print(f"  ✓  Approved path: {resolved}")
         except Exception:

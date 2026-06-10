@@ -39,7 +39,13 @@ class AuditLogger:
             "acceptance_criteria_count": len(spec.get("acceptance_criteria", [])),
         })
 
-    def log_ai_interaction(self, stage: str, prompt: str, response: str, model: str) -> None:
+    def log_ai_interaction(
+        self,
+        stage: str,
+        prompt: str,
+        response: str,
+        model: str,
+    ) -> None:
         self._write({
             "event": "ai_interaction",
             "stage": stage,
@@ -50,7 +56,12 @@ class AuditLogger:
             "response": response,
         })
 
-    def log_approval(self, stage: str, approved: bool, approver: str = "human-cli") -> None:
+    def log_approval(
+        self,
+        stage: str,
+        approved: bool,
+        approver: str = "human-cli",
+    ) -> None:
         self._write({
             "event": "approval",
             "stage": stage,
@@ -58,7 +69,12 @@ class AuditLogger:
             "approver": approver,
         })
 
-    def log_generated_file(self, file_path: str, file_type: str, content_length: int) -> None:
+    def log_generated_file(
+        self,
+        file_path: str,
+        file_type: str,
+        content_length: int,
+    ) -> None:
         self._write({
             "event": "file_generated",
             "file_path": file_path,

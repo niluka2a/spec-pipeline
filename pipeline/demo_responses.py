@@ -10,11 +10,36 @@ DEMO_PLAN = {
         "and password update logic with rate limiting."
     ),
     "implementation_tasks": [
-        {"id": "T-001", "title": "Token generator", "description": "Generate cryptographically secure reset tokens", "estimated_effort": "small"},
-        {"id": "T-002", "title": "Rate limiter", "description": "Block more than 3 requests/hour per email", "estimated_effort": "small"},
-        {"id": "T-003", "title": "Token store", "description": "Store and validate tokens with expiry", "estimated_effort": "medium"},
-        {"id": "T-004", "title": "Password updater", "description": "Validate and apply new password", "estimated_effort": "medium"},
-        {"id": "T-005", "title": "Email dispatcher", "description": "Send reset email with token link", "estimated_effort": "medium"},
+        {
+            "id": "T-001",
+            "title": "Token generator",
+            "description": "Generate cryptographically secure reset tokens",
+            "estimated_effort": "small",
+        },
+        {
+            "id": "T-002",
+            "title": "Rate limiter",
+            "description": "Block more than 3 requests/hour per email",
+            "estimated_effort": "small",
+        },
+        {
+            "id": "T-003",
+            "title": "Token store",
+            "description": "Store and validate tokens with expiry",
+            "estimated_effort": "medium",
+        },
+        {
+            "id": "T-004",
+            "title": "Password updater",
+            "description": "Validate and apply new password",
+            "estimated_effort": "medium",
+        },
+        {
+            "id": "T-005",
+            "title": "Email dispatcher",
+            "description": "Send reset email with token link",
+            "estimated_effort": "medium",
+        },
     ],
     "impacted_modules": [
         "sandbox/src/token_store.py",
@@ -71,7 +96,10 @@ class TokenStore:
         return raw
 
     def validate_token(self, raw: str) -> str | None:
-        """Validate token. Returns email if valid, None otherwise. Invalidates on use."""
+        """
+        Validate token. Returns email if valid, None otherwise.
+        Invalidates on use.
+        """
         token_hash = hashlib.sha256(raw.encode()).hexdigest()
         record = self._store.get(token_hash)
         if not record:
@@ -124,7 +152,12 @@ class EmailDispatcher:
     def __init__(self) -> None:
         self.sent: list[dict] = []  # audit trail for testing
 
-    def send_reset_email(self, email: str, token: str, base_url: str = "https://example.com") -> bool:
+    def send_reset_email(
+        self,
+        email: str,
+        token: str,
+        base_url: str = "https://example.com",
+    ) -> bool:
         """Send a reset email. Returns True on success."""
         if not EMAIL_PATTERN.match(email):
             return False
@@ -158,7 +191,12 @@ class PasswordResetService:
             return {"success": False, "error": "invalid_email"}
         return {"success": True, "token": token}
 
-    def complete_reset(self, token: str, new_password: str, confirm_password: str) -> dict:
+    def complete_reset(
+        self,
+        token: str,
+        new_password: str,
+        confirm_password: str,
+    ) -> dict:
         """AC-003, AC-004, AC-005: Complete the password reset."""
         if new_password != confirm_password:
             return {"success": False, "error": "passwords_do_not_match"}
@@ -168,7 +206,11 @@ class PasswordResetService:
         if email is None:
             return {"success": False, "error": "invalid_or_expired_token"}
         # In production: hash and persist the new password
-        return {"success": True, "email": email, "message": "Password updated successfully"}
+        return {
+            "success": True,
+            "email": email,
+            "message": "Password updated successfully",
+        }
 ''',
 }
 

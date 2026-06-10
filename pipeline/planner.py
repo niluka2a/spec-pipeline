@@ -5,7 +5,6 @@ Converts a validated spec into a structured implementation plan using Claude.
 
 import json
 import os
-import sys
 from typing import Any
 
 import anthropic
@@ -50,7 +49,7 @@ def generate_plan(
         plan = json.loads(raw)
     except json.JSONDecodeError:
         # Try stripping accidental markdown fences
-        plan = _parse_json(raw) 
+        plan = _parse_json(raw)
 
     _print_plan(plan)
     return plan
@@ -73,5 +72,9 @@ def _print_plan(plan: dict[str, Any]) -> None:
             print(f"     - {r}")
 
     modules = plan.get("impacted_modules", [])
-    print(f"\n  📁 Impacted modules: {', '.join(modules) if modules else 'none specified'}")
+    if modules:
+        impacted = ", ".join(modules)
+    else:
+        impacted = "none specified"
+    print(f"\n  📁 Impacted modules: {impacted}")
     print(f"\n  🧪 Test strategy: {plan.get('test_strategy', 'N/A')}")
