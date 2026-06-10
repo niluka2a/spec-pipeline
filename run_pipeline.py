@@ -39,11 +39,12 @@ def main() -> None:
     print(f"  Run ID: {audit.run_id}\n")
 
     # Initialise Anthropic client
+    demo_mode = os.environ.get("PIPELINE_DEMO_MODE") == "true"
     api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
+    if not demo_mode and not api_key:
         print("ERROR: ANTHROPIC_API_KEY environment variable not set.")
         sys.exit(1)
-    client = anthropic.Anthropic(api_key=api_key)
+    client = anthropic.Anthropic(api_key=api_key or "demo")
 
     # ── Stage 1: Spec Intake ─────────────────────────────────────────
     print("\n── STAGE 1: Spec Intake ─────────────────────────────")
