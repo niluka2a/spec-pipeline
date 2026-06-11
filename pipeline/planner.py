@@ -12,10 +12,9 @@ import yaml
 
 from prompts.templates import PLANNING_PROMPT
 from pipeline.audit import AuditLogger
+from pipeline.config import MODEL_PLANNING
 from pipeline.utils import _parse_json
 from pipeline.demo_responses import DEMO_PLAN
-
-MODEL = "claude-sonnet-4-6"
 
 
 def generate_plan(
@@ -37,13 +36,13 @@ def generate_plan(
     prompt = PLANNING_PROMPT.format(spec_yaml=spec_yaml)
 
     response = client.messages.create(
-        model=MODEL,
+        model=MODEL_PLANNING,
         max_tokens=4000,
         messages=[{"role": "user", "content": prompt}],
     )
 
     raw = response.content[0].text.strip()
-    audit.log_ai_interaction("planning", prompt, raw, MODEL)
+    audit.log_ai_interaction("planning", prompt, raw, MODEL_PLANNING)
 
     try:
         plan = json.loads(raw)

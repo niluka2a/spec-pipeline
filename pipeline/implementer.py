@@ -13,10 +13,10 @@ import yaml
 
 from prompts.templates import IMPLEMENTATION_PROMPT
 from pipeline.audit import AuditLogger
+from pipeline.config import MODEL_IMPLEMENTATION
 from pipeline.utils import _parse_delimited
 from pipeline.demo_responses import DEMO_IMPLEMENTATION
 
-MODEL = "claude-sonnet-4-6"
 ALLOWED_ROOT = Path("sandbox/src")
 
 
@@ -45,13 +45,13 @@ def generate_implementation(
     prompt = IMPLEMENTATION_PROMPT.format(spec_yaml=spec_yaml, plan_json=plan_json)
 
     response = client.messages.create(
-        model=MODEL,
+        model=MODEL_IMPLEMENTATION,
         max_tokens=8000,
         messages=[{"role": "user", "content": prompt}],
     )
 
     raw = response.content[0].text.strip()
-    audit.log_ai_interaction("implementation", prompt, raw, MODEL)
+    audit.log_ai_interaction("implementation", prompt, raw, MODEL_IMPLEMENTATION)
 
     try:
         files = json.loads(raw)

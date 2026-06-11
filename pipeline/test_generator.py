@@ -14,9 +14,8 @@ import yaml
 from pipeline.demo_responses import DEMO_TESTS
 from prompts.templates import TEST_GENERATION_PROMPT
 from pipeline.audit import AuditLogger
+from pipeline.config import MODEL_TEST_GENERATION
 from pipeline.utils import _parse_delimited
-
-MODEL = "claude-sonnet-4-6"
 
 
 def generate_tests(
@@ -59,13 +58,13 @@ def generate_tests(
     )
 
     response = client.messages.create(
-        model=MODEL,
+        model=MODEL_TEST_GENERATION,
         max_tokens=4000,
         messages=[{"role": "user", "content": prompt}],
     )
 
     raw = response.content[0].text.strip()
-    audit.log_ai_interaction("test_generation", prompt, raw, MODEL)
+    audit.log_ai_interaction("test_generation", prompt, raw, MODEL_TEST_GENERATION)
 
     try:
         test_files = json.loads(raw)
