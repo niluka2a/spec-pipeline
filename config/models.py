@@ -1,8 +1,7 @@
-"""Pipeline configuration and environment-backed defaults."""
+"""Model selection configuration for the pipeline."""
 
 import os
 
-# Single fallback variable for all stages.
 DEFAULT_MODEL = os.environ.get("PIPELINE_MODEL", "")
 
 MODEL_PLANNING = os.environ.get(

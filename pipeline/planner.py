@@ -12,7 +12,7 @@ import yaml
 
 from prompts.templates import PLANNING_PROMPT
 from pipeline.audit import AuditLogger
-from pipeline.config import MODEL_PLANNING
+from config import MODEL_PLANNING
 from pipeline.utils import _parse_json
 from pipeline.demo_responses import DEMO_PLAN
 

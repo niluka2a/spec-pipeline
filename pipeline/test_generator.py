@@ -14,7 +14,7 @@ import yaml
 from pipeline.demo_responses import DEMO_TESTS
 from prompts.templates import TEST_GENERATION_PROMPT
 from pipeline.audit import AuditLogger
-from pipeline.config import MODEL_TEST_GENERATION
+from config import MODEL_TEST_GENERATION
 from pipeline.utils import _parse_delimited
 
 

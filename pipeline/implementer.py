@@ -13,7 +13,7 @@ import yaml
 
 from prompts.templates import IMPLEMENTATION_PROMPT
 from pipeline.audit import AuditLogger
-from pipeline.config import MODEL_IMPLEMENTATION
+from config import MODEL_IMPLEMENTATION
 from pipeline.utils import _parse_delimited
 from pipeline.demo_responses import DEMO_IMPLEMENTATION
 
