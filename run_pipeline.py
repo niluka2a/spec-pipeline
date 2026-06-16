@@ -12,7 +12,7 @@ import argparse
 import sys
 import os
 
-import anthropic
+from clients.factory import create_client
 
 from pipeline.spec_intake import load_and_validate
 from pipeline.audit import AuditLogger
@@ -38,13 +38,14 @@ def main() -> None:
     audit = AuditLogger(run_id=args.run_id)
     print(f"  Run ID: {audit.run_id}\n")
 
-    # Initialise Anthropic client
+    # Initialise AI client via factory
     demo_mode = os.environ.get("PIPELINE_DEMO_MODE") == "true"
     api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not demo_mode and not api_key:
-        print("ERROR: ANTHROPIC_API_KEY environment variable not set.")
+    try:
+        client = create_client(provider=None, api_key=api_key, demo_mode=demo_mode)
+    except Exception as exc:
+        print(f"ERROR: failed to create AI client: {exc}")
         sys.exit(1)
-    client = anthropic.Anthropic(api_key=api_key or "demo")
 
     # ── Stage 1: Spec Intake ─────────────────────────────────────────
     print("\n── STAGE 1: Spec Intake ─────────────────────────────")
