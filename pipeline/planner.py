@@ -7,20 +7,20 @@ import json
 import os
 from typing import Any
 
-import anthropic
 import yaml
 
 from prompts.templates import PLANNING_PROMPT
 from pipeline.audit import AuditLogger
 from config import MODEL_PLANNING
 from pipeline.utils import _parse_json
+from clients.ai_client import AIClient
 from pipeline.demo_responses import DEMO_PLAN
 
 
 def generate_plan(
     spec: dict[str, Any],
     audit: AuditLogger,
-    client: anthropic.Anthropic,
+    client: AIClient,
 ) -> dict[str, Any]:
     """Call Claude to produce an implementation plan from the spec."""
     print("\n[planning] Generating implementation plan...")
@@ -35,13 +35,7 @@ def generate_plan(
     # Format the prompt with the YAML spec embedded.
     prompt = PLANNING_PROMPT.format(spec_yaml=spec_yaml)
 
-    response = client.messages.create(
-        model=MODEL_PLANNING,
-        max_tokens=4000,
-        messages=[{"role": "user", "content": prompt}],
-    )
-
-    raw = response.content[0].text.strip()
+    raw = client.request(prompt, MODEL_PLANNING, 4000)
     audit.log_ai_interaction("planning", prompt, raw, MODEL_PLANNING)
 
     try:
