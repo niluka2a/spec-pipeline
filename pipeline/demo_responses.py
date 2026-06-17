@@ -214,7 +214,7 @@ class PasswordResetService:
 }
 
 DEMO_TESTS = {
-    "tests/test_unit.py": '''\
+    "sandbox/tests/test_unit.py": '''\
 """Unit tests — one test per acceptance criterion."""
 import time
 import pytest
@@ -295,7 +295,7 @@ def test_invalid_email_rejected():
     assert dispatcher.send_reset_email("not-an-email", "sometoken") is False
 ''',
 
-    "tests/test_integration.py": '''\
+    "sandbox/tests/test_integration.py": '''\
 """Integration tests — full end-to-end reset flow."""
 import pytest
 from sandbox.src.password_reset import PasswordResetService

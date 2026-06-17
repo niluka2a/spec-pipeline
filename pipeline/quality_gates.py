@@ -40,6 +40,20 @@ def _sandbox_source_files() -> list[str]:
     return [str(p) for p in Path("sandbox/src").glob("*.py")]
 
 
+def _test_directories() -> list[str]:
+    """Return the directory that should be used for pytest runs.
+
+    The generated test suite is expected to live under sandbox/tests so we
+    prefer that location and only fall back to the repo-level tests directory
+    if needed.
+    """
+    if Path("sandbox/tests").exists():
+        return ["sandbox/tests"]
+    if Path("tests").exists():
+        return ["tests"]
+    return ["tests"]
+
+
 def run_quality_gates(audit: AuditLogger, base_dir: str = ".") -> bool:
     """Run all quality gates. Returns True only if all required gates pass."""
     print("\n[quality-gates] Running validation checks...")
@@ -80,12 +94,13 @@ def run_quality_gates(audit: AuditLogger, base_dir: str = ".") -> bool:
 
     # 3. Test execution with pytest
     print("  → Running tests (pytest)...")
+    test_dirs = _test_directories()
     passed, output = _run(
         [
             sys.executable,
             "-m",
             "pytest",
-            "tests/",
+            *test_dirs,
             "-v",
             "--tb=short",
             "--no-header",
