@@ -63,12 +63,13 @@ Requirements:
 - At least one test per acceptance criterion (tag with the AC ID in the test name or docstring)
 - Use pytest fixtures where appropriate
 - Tests must be self-contained (no external services)
+- Write generated test files under the repository `sandbox/tests/` directory, not under `tests/` or `sandbox/src/`
 
 Return files using this EXACT format and nothing else:
 
-===FILE: tests/test_unit.py===
+===FILE: sandbox/tests/test_unit.py===
 <full file content here>
-===FILE: tests/test_integration.py===
+===FILE: sandbox/tests/test_integration.py===
 <full file content here>
 ===END===
 """
