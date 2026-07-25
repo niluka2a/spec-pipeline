@@ -16,6 +16,7 @@ from config import MODEL_IMPLEMENTATION
 from pipeline.utils import _parse_delimited
 from pipeline.demo_responses import DEMO_IMPLEMENTATION
 from clients.ai_client import AIClient
+from services.file_service import FileService
 
 ALLOWED_ROOT = Path("sandbox/src")
 
@@ -28,6 +29,7 @@ def generate_implementation(
 ) -> dict[str, str]:
     """Generate code files from spec + plan. Returns {filepath: content}."""
     print("\n[implementation] Generating code...")
+    file_service = FileService(audit)
 
     if os.environ.get("PIPELINE_DEMO_MODE") == "true":
         print("  [DEMO] Using pre-written implementation")
@@ -37,7 +39,7 @@ def generate_implementation(
             str(DEMO_IMPLEMENTATION),
             "demo",
         )
-        _write_files(DEMO_IMPLEMENTATION, audit)
+        file_service.write_files(DEMO_IMPLEMENTATION)
         return DEMO_IMPLEMENTATION
 
     spec_yaml = yaml.dump(spec, default_flow_style=False)
@@ -54,7 +56,7 @@ def generate_implementation(
 
     # Governance: enforce sandbox restriction
     safe_files = _enforce_sandbox(files)
-    _write_files(safe_files, audit)
+    file_service.write_files(safe_files)
     return safe_files
 
 
@@ -75,12 +77,3 @@ def _enforce_sandbox(files: dict[str, str]) -> dict[str, str]:
             print(f"  ✗  BLOCKED path (outside sandbox): {path}")
     return safe
 
-
-def _write_files(files: dict[str, str], audit: AuditLogger) -> None:
-    """Write generated files to disk."""
-    for path, content in files.items():
-        p = Path(path)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(content, encoding="utf-8")
-        audit.log_generated_file(str(p), "implementation", len(content))
-        print(f"  📄  Written: {p}  ({len(content)} chars)")
