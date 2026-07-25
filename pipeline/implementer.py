@@ -8,7 +8,6 @@ import os
 from pathlib import Path
 from typing import Any
 
-import anthropic
 import yaml
 
 from prompts.templates import IMPLEMENTATION_PROMPT
@@ -16,6 +15,7 @@ from pipeline.audit import AuditLogger
 from config import MODEL_IMPLEMENTATION
 from pipeline.utils import _parse_delimited
 from pipeline.demo_responses import DEMO_IMPLEMENTATION
+from clients.ai_client import AIClient
 from services.file_service import FileService
 
 ALLOWED_ROOT = Path("sandbox/src")
@@ -25,7 +25,7 @@ def generate_implementation(
     spec: dict[str, Any],
     plan: dict[str, Any],
     audit: AuditLogger,
-    client: anthropic.Anthropic,
+    client: AIClient,
 ) -> dict[str, str]:
     """Generate code files from spec + plan. Returns {filepath: content}."""
     print("\n[implementation] Generating code...")
@@ -46,13 +46,7 @@ def generate_implementation(
     plan_json = json.dumps(plan, indent=2)
     prompt = IMPLEMENTATION_PROMPT.format(spec_yaml=spec_yaml, plan_json=plan_json)
 
-    response = client.messages.create(
-        model=MODEL_IMPLEMENTATION,
-        max_tokens=8000,
-        messages=[{"role": "user", "content": prompt}],
-    )
-
-    raw = response.content[0].text.strip()
+    raw = client.request(prompt, MODEL_IMPLEMENTATION, 8000)
     audit.log_ai_interaction("implementation", prompt, raw, MODEL_IMPLEMENTATION)
 
     try:

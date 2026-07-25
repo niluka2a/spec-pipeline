@@ -7,7 +7,6 @@ import json
 import os
 from typing import Any
 
-import anthropic
 import yaml
 
 from pipeline.demo_responses import DEMO_TESTS
@@ -15,6 +14,7 @@ from prompts.templates import TEST_GENERATION_PROMPT
 from pipeline.audit import AuditLogger
 from config import MODEL_TEST_GENERATION
 from pipeline.utils import _parse_delimited
+from clients.ai_client import AIClient
 from services.file_service import FileService
 
 
@@ -22,7 +22,7 @@ def generate_tests(
     spec: dict[str, Any],
     implementation_files: dict[str, str],
     audit: AuditLogger,
-    client: anthropic.Anthropic,
+    client: AIClient,
 ) -> dict[str, str]:
     """Generate test files mapped to spec acceptance criteria."""
     print("\n[test-gen] Generating tests...")
@@ -62,13 +62,7 @@ def generate_tests(
         acceptance_criteria=ac_list,
     )
 
-    response = client.messages.create(
-        model=MODEL_TEST_GENERATION,
-        max_tokens=4000,
-        messages=[{"role": "user", "content": prompt}],
-    )
-
-    raw = response.content[0].text.strip()
+    raw = client.request(prompt, MODEL_TEST_GENERATION, 4000)
     audit.log_ai_interaction("test_generation", prompt, raw, MODEL_TEST_GENERATION)
 
     try:
