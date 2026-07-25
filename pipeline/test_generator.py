@@ -5,7 +5,6 @@ Generates pytest unit, integration, and acceptance tests mapped to AC criteria.
 
 import json
 import os
-from pathlib import Path
 from typing import Any
 
 import anthropic
@@ -16,6 +15,7 @@ from prompts.templates import TEST_GENERATION_PROMPT
 from pipeline.audit import AuditLogger
 from config import MODEL_TEST_GENERATION
 from pipeline.utils import _parse_delimited
+from services.file_service import FileService
 
 
 def generate_tests(
@@ -26,6 +26,7 @@ def generate_tests(
 ) -> dict[str, str]:
     """Generate test files mapped to spec acceptance criteria."""
     print("\n[test-gen] Generating tests...")
+    file_service = FileService(audit)
 
     if os.environ.get("PIPELINE_DEMO_MODE") == "true":
         print("  [DEMO] Using pre-written tests")
@@ -35,7 +36,11 @@ def generate_tests(
             str(DEMO_TESTS),
             "demo",
         )
-        _write_files(DEMO_TESTS, audit)
+        file_service.write_files(
+            DEMO_TESTS,
+            file_type="test",
+            display_icon="🧪",
+        )
         return DEMO_TESTS
 
     spec_yaml = yaml.dump(spec, default_flow_style=False)
@@ -72,15 +77,9 @@ def generate_tests(
         test_files = _parse_delimited(raw)
 
     # Write test files
-    _write_files(test_files, audit)
+    file_service.write_files(
+        test_files,
+        file_type="test",
+        display_icon="🧪",
+    )
     return test_files
-
-
-def _write_files(files: dict[str, str], audit: AuditLogger) -> None:
-    """Write generated files to disk."""
-    for path, content in files.items():
-        p = Path(path)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(content, encoding="utf-8")
-        audit.log_generated_file(str(p), "test", len(content))
-        print(f"  🧪  Written: {p}  ({len(content)} chars)")
